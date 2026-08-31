@@ -113,12 +113,6 @@ icons/                   Extension icons
   measured from that install/startup moment (the tab's true creation time isn't knowable), not from when
   the tab was actually opened.
 
-## Contributing
-
-Issues and PRs are welcome. This is a small, dependency-free project by design — please keep changes
-free of new build tooling or runtime dependencies. [`CLAUDE.md`](./CLAUDE.md) has the architecture notes
-worth reading before diving in.
-
 ## License
 
 MIT © Tab Cleaner Authors — see [LICENSE](./LICENSE).
