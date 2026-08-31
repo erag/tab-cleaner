@@ -10,8 +10,13 @@ source files are loaded by Chrome directly.
 
 ## Development / testing
 
-There is no build tool, package manager, linter, or test suite in this repo — it's plain unbundled JS loaded
-straight into Chrome.
+There is no build tool, package manager, or linter in this repo — it's plain unbundled JS loaded straight
+into Chrome. The one exception is `scripts/history-utils.js`, whose logic is pure (no `chrome.*` calls) and
+has a real Node test suite: run `node --test tests/*.test.js` from the repo root (no install needed, it's
+`node:test`/`node:assert` from the standard library). Plain `node --test` with no arguments also works (it
+auto-discovers `tests/`), but on current Node the seemingly-equivalent `node --test tests/` does not — Node
+treats a bare directory argument as a single file/glob rather than expanding it, and errors with "Cannot
+find module".
 
 To try changes:
 1. Open `chrome://extensions`, enable "Developer mode".
@@ -19,10 +24,6 @@ To try changes:
 3. Background service worker logs are visible via the "service worker" link on the extension's card in
    `chrome://extensions` (look for `[TabCleaner]`-prefixed `console.log`/`console.warn`/`console.error` lines).
 4. Popup UI logic can be debugged by right-clicking the extension's toolbar icon → "Inspect popup".
-
-The one exception is `scripts/history-utils.js`, whose logic is pure (no `chrome.*` calls) and has a real
-Node test suite: run `node --test tests/` (requires Node 18+; no install needed, it's `node:test`/
-`node:assert` from the standard library).
 
 ## Architecture
 
@@ -42,12 +43,24 @@ popup and background):
 
 - `chrome.storage.local`: persisted settings (`enabled`, `idleThreshold` in ms, `protectAudio`,
   `protectInput`) plus `closeHistory` (ring buffer of up to `MAX_HISTORY` = 50 closed-tab records, newest
-  first, used to render the "recently closed" list and let the user reopen a tab from it).
-- `chrome.storage.session`: `lastActivated`, a `{ tabId: timestamp }` map of when each tab was last
-  focused/created. Rebuilt from scratch in `initLastActivated()` on `onInstalled`/`onStartup`, and kept
-  current incrementally by the `chrome.tabs.onActivated`/`onCreated`/`onRemoved` listeners in
-  `background.js`. This is the source of truth the alarm handler uses to compute idle time — the popup only
-  reads it for display.
+  first, used to render the "recently closed" list and let the user reopen a tab from it). Each entry also
+  carries an `openedAt` timestamp alongside the pre-existing `closedAt`, so the popup can show a lifetime
+  range (see `buildHistoryEntry()`/`formatLifetime()` in `scripts/history-utils.js`). For tabs that already
+  existed before the extension's `onInstalled`/`onStartup` ran, `openedAt` is only an approximation — the
+  true creation time isn't knowable, so it's backfilled to that startup time (the same approximation
+  `lastActivated` init already made, now extended to `tabCreated` below).
+- `chrome.storage.session`: two parallel `{ tabId: timestamp }` maps, both rebuilt from scratch in
+  `initTabTimestamps()` on `onInstalled`/`onStartup` and kept current incrementally by the same
+  `chrome.tabs.onActivated`/`onCreated`/`onRemoved` listeners in `background.js`:
+  - `lastActivated` — when each tab was last focused/created. This is the source of truth the alarm handler
+    uses to compute idle time — the popup only reads it for display.
+  - `tabCreated` — when each tab was created (not updated on focus). The alarm handler reads this to
+    compute a closed tab's `openedAt` when recording it into `closeHistory`.
+
+  `lastActivated` and `tabCreated` must be kept in sync: every listener/handler that reads, writes, or
+  deletes one (`onActivated`, `onCreated`, `onRemoved`, and the alarm handler's cleanup of stale/closed tab
+  IDs) does the same to the other. If you add a new event handler that touches tab timestamps, update both
+  maps together.
 
 ### Close decision flow (`chrome.alarms.onAlarm` in `background.js`)
 
