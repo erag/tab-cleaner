@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <span class="icon">🧹</span>
+      <span class="title">Tab Cleaner</span>
+    </div>
+
+    <div class="section">
+      <div class="toggle-row">
+        <span id="status-text" class="status-enabled">● 已启用</span>
+        <label class="switch">
+          <input type="checkbox" id="enabled-toggle" checked>
+          <span class="slider"></span>
+        </label>
+      </div>
+    </div>
+
+    <div class="section">
+      <label class="label">空闲阈值</label>
+      <div class="threshold-row">
+        <input type="number" id="threshold-value" min="1" value="30" class="threshold-input">
+        <select id="threshold-unit" class="threshold-select">
+          <option value="60000" selected>分钟</option>
+          <option value="3600000">小时</option>
+        </select>
+      </div>
+      <div id="threshold-warning" class="warning hidden">阈值过小可能导致频繁关闭</div>
+    </div>
+
+    <div class="divider"></div>
+
+    <div class="section">
+      <label class="label">当前状态</label>
+      <div class="stat-row">
+        <span>打开 Tab 数:</span>
+        <span id="tab-count">0</span>
+      </div>
+      <div class="stat-row">
+        <span>即将清理:</span>
+        <span id="cleanup-count" class="cleanup-count">0</span>
+      </div>
+    </div>
+
+    <div class="divider"></div>
+
+    <div class="section">
+      <label class="label">保护规则</label>
+      <label class="checkbox-row">
+        <input type="checkbox" id="protect-audio" checked>
+        <span>有音频的 Tab</span>
+      </label>
+      <label class="checkbox-row">
+        <input type="checkbox" id="protect-input" checked>
+        <span>有输入的 Tab</span>
+      </label>
+    </div>
+
+    <div class="divider"></div>
+
+    <div class="section">
+      <div class="label-row">
+        <label class="label">关闭历史</label>
+        <button id="clear-history" class="clear-btn">清空</button>
+      </div>
+      <div id="history-list" class="history-list">
+        <div class="history-empty">暂无记录</div>
+      </div>
+    </div>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
