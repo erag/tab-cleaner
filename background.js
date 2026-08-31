@@ -1,5 +1,7 @@
 // background.js — Tab Cleaner Service Worker
 
+importScripts('scripts/history-utils.js');
+
 const DEFAULT_SETTINGS = {
   enabled: true,
   idleThreshold: 30 * 60 * 1000, // 30 minutes in ms
@@ -34,15 +36,19 @@ async function setLastActivated(map) {
   await chrome.storage.session.set({ lastActivated: map });
 }
 
+async function getTabCreated() {
+  const data = await chrome.storage.session.get('tabCreated');
+  return data.tabCreated || {};
+}
+
+async function setTabCreated(map) {
+  await chrome.storage.session.set({ tabCreated: map });
+}
+
 // --- Close history ---
 
-async function recordClose(tab) {
-  const entry = {
-    url: tab.url || '',
-    title: tab.title || '',
-    favIconUrl: tab.favIconUrl || '',
-    closedAt: Date.now(),
-  };
+async function recordClose(tab, openedAt) {
+  const entry = buildHistoryEntry(tab, openedAt, Date.now());
   const data = await chrome.storage.local.get('closeHistory');
   const history = data.closeHistory || [];
   history.unshift(entry); // newest first
@@ -54,14 +60,17 @@ async function recordClose(tab) {
 
 // --- Initialization ---
 
-async function initLastActivated() {
+async function initTabTimestamps() {
   const tabs = await chrome.tabs.query({});
-  const map = {};
   const now = Date.now();
+  const activatedMap = {};
+  const createdMap = {};
   for (const tab of tabs) {
-    map[tab.id] = now;
+    activatedMap[tab.id] = now;
+    createdMap[tab.id] = now;
   }
-  await setLastActivated(map);
+  await setLastActivated(activatedMap);
+  await setTabCreated(createdMap);
   console.log('[TabCleaner] Initialized timestamps for', tabs.length, 'tabs');
 }
 
@@ -83,28 +92,38 @@ chrome.tabs.onActivated.addListener(async (activeInfo) => {
 
 chrome.tabs.onCreated.addListener(async (tab) => {
   if (tab.id === undefined) return;
-  const map = await getLastActivated();
-  map[tab.id] = Date.now();
-  await setLastActivated(map);
+  const now = Date.now();
+
+  const activatedMap = await getLastActivated();
+  activatedMap[tab.id] = now;
+  await setLastActivated(activatedMap);
+
+  const createdMap = await getTabCreated();
+  createdMap[tab.id] = now;
+  await setTabCreated(createdMap);
 });
 
 chrome.tabs.onRemoved.addListener(async (tabId) => {
-  const map = await getLastActivated();
-  delete map[tabId];
-  await setLastActivated(map);
+  const activatedMap = await getLastActivated();
+  delete activatedMap[tabId];
+  await setLastActivated(activatedMap);
+
+  const createdMap = await getTabCreated();
+  delete createdMap[tabId];
+  await setTabCreated(createdMap);
 });
 
 // --- Startup ---
 
 chrome.runtime.onInstalled.addListener(async () => {
   console.log('[TabCleaner] onInstalled — initializing');
-  await initLastActivated();
+  await initTabTimestamps();
   await ensureAlarm();
 });
 
 chrome.runtime.onStartup.addListener(async () => {
   console.log('[TabCleaner] onStartup — initializing');
-  await initLastActivated();
+  await initTabTimestamps();
   await ensureAlarm();
 });
 
@@ -124,6 +143,7 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
     }
 
     const map = await getLastActivated();
+    const createdMap = await getTabCreated();
     const now = Date.now();
     const tabsToClose = [];
 
@@ -154,6 +174,7 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
       if (!tab) {
         // Tab no longer exists, clean up
         delete map[tabIdStr];
+        delete createdMap[tabIdStr];
         continue;
       }
 
@@ -176,8 +197,9 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
       tabsToClose.push(tabId);
     }
 
-    // Save cleaned map
+    // Save cleaned maps
     await setLastActivated(map);
+    await setTabCreated(createdMap);
 
     if (tabsToClose.length === 0) {
       console.log('[TabCleaner] Alarm fired — no tabs to close (idle threshold:', settings.idleThreshold / 60000, 'min)');
@@ -213,7 +235,7 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
       }
 
       if (shouldClose) {
-        await recordClose(tab);
+        await recordClose(tab, createdMap[tabId]);
         try {
           await chrome.tabs.remove(tabId);
           console.log('[TabCleaner] Closed idle tab', tabId, ':', tab.url);
@@ -221,13 +243,15 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
           // Tab already closed or cannot be closed — silently ignore
           console.warn('[TabCleaner] Failed to close tab', tabId, ':', e.message);
         }
-        // Remove from map regardless
+        // Remove from maps regardless
         delete map[tabId];
+        delete createdMap[tabId];
       }
     }
 
     // Final map cleanup after closes
     await setLastActivated(map);
+    await setTabCreated(createdMap);
   } catch (e) {
     console.error('[TabCleaner] Alarm handler error:', e);
   }
