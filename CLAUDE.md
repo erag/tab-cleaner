@@ -20,6 +20,10 @@ To try changes:
    `chrome://extensions` (look for `[TabCleaner]`-prefixed `console.log`/`console.warn`/`console.error` lines).
 4. Popup UI logic can be debugged by right-clicking the extension's toolbar icon → "Inspect popup".
 
+The one exception is `scripts/history-utils.js`, whose logic is pure (no `chrome.*` calls) and has a real
+Node test suite: run `node --test tests/` (requires Node 18+; no install needed, it's `node:test`/
+`node:assert` from the standard library).
+
 ## Architecture
 
 Three independent runtime contexts communicate only through `chrome.storage` (no message passing between
