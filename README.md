@@ -1,84 +1,124 @@
 # Tab Cleaner
 
-一个 Chrome 扩展（Manifest V3）：自动关闭长时间空闲的标签页，帮你清理越积越多的浏览器 tab。
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
+[![Manifest](https://img.shields.io/badge/Manifest-V3-blue.svg)](./manifest.json)
+[![No build step](https://img.shields.io/badge/build-none-lightgrey.svg)](#development)
 
-## 功能
+A Chrome extension that automatically closes tabs you've forgotten about — idle for too long, and safe to close.
 
-- **空闲阈值**：自定义多久没访问的 tab 会被判定为空闲（默认 30 分钟），可按分钟/小时设置。
-- **保护规则**：
-  - 有音频的 tab（正在播放视频/音乐）不会被关闭。
-  - 有未提交表单输入的 tab 不会被关闭（关闭前会检测页面里是否有已修改但未提交的输入框/文本域）。
-  - 当前激活的 tab（每个窗口里正在看的那个）永远不会被关闭。
-- **实时状态**：弹窗里显示当前打开的 tab 总数，以及"即将清理"的数量（已经超过空闲阈值、且未被保护规则排除的 tab 数）。
-- **关闭历史**：记录最近被自动关闭的 tab（URL、标题、存活时间范围），点击历史条目可直接重新打开该页面。
+**English** (this page) · [中文说明](./README.zh-CN.md)
 
-## 安装
+## Table of Contents
 
-本项目没有构建步骤，直接加载源码即可：
+- [Features](#features)
+- [Installation](#installation)
+- [Usage](#usage)
+- [Permissions](#permissions)
+- [Development](#development)
+- [Project Structure](#project-structure)
+- [Known Limitations](#known-limitations)
+- [Contributing](#contributing)
+- [License](#license)
 
-1. Chrome 地址栏输入 `chrome://extensions` 并回车。
-2. 打开右上角「开发者模式」开关。
-3. 点击「加载已解压的扩展程序」。
-4. 选择本项目的根目录（即本文件所在目录）。
-5. 完成 — 工具栏会出现 Tab Cleaner 图标。
+## Features
 
-之后代码有更新，回到这个页面点扩展卡片上的刷新图标即可，不需要重新加载。
+- **Idle threshold** — configure how long a tab must sit unfocused before it's considered idle (default 30
+  minutes), in minutes or hours.
+- **Protection rules**
+  - Tabs playing audio (video/music) are never closed.
+  - Tabs with unsaved form input (a modified but not-yet-submitted field) are never closed — checked by
+    injecting a detection script right before closing.
+  - The currently active tab in every window is never closed.
+- **Live stats** — the popup shows how many tabs are open and how many are already past the idle threshold
+  and eligible for the next cleanup pass.
+- **Close history** — every tab the extension auto-closes is recorded (URL, title, and how long it was
+  open for). Click an entry to reopen it.
 
-## 使用
+## Installation
 
-点击工具栏图标打开弹窗：
+There's no build step — the extension loads straight from source:
 
-- 右上角开关整体启用/禁用插件。
-- 「空闲阈值」设置多久判定为空闲。
-- 「保护规则」勾选是否保护有音频/有输入的 tab。
-- 「关闭历史」查看最近被清理的 tab，点击可重新打开。
+1. Open `chrome://extensions` in Chrome.
+2. Enable **Developer mode** (top right).
+3. Click **Load unpacked**.
+4. Select this repository's root directory.
+5. Done — the Tab Cleaner icon appears in your toolbar.
 
-插件在后台每分钟检查一次，把符合条件（空闲超时、非当前激活、未被保护规则排除）的 tab 自动关闭。
+After pulling updates, click the reload icon on the extension's card in `chrome://extensions` — no need to
+load it again.
 
-## 权限说明
+## Usage
 
-`manifest.json` 声明的权限及用途：
+Click the toolbar icon to open the popup:
 
-| 权限 | 用途 |
+- The toggle in the top right enables/disables the extension entirely.
+- **Idle threshold** sets how long before a tab counts as idle.
+- **Protection rules** lets you opt tabs with audio or unsaved input out of auto-closing.
+- **Close history** lists recently closed tabs — click one to reopen it.
+
+In the background, the extension checks every minute and closes any tab that's idle, not the active tab in
+its window, and not excluded by a protection rule.
+
+## Permissions
+
+| Permission | Why it's needed |
 |---|---|
-| `tabs` | 读取 tab 的 URL/标题/是否播放音频，以及执行关闭操作 |
-| `alarms` | 每分钟触发一次空闲检查 |
-| `storage` | 保存用户设置和关闭历史（本地），以及 tab 活跃时间戳（会话级） |
-| `scripting` | 关闭前向页面注入脚本，检测是否有未提交的表单输入 |
-| `host_permissions: <all_urls>` | 上述脚本注入需要覆盖任意网站 |
+| `tabs` | Read each tab's URL/title/audio state, and close tabs |
+| `alarms` | Run the idle check once a minute |
+| `storage` | Save settings and close history (persisted), and per-tab activity timestamps (session-only) |
+| `scripting` | Inject a detection script before closing a tab, to check for unsaved form input |
+| `host_permissions: <all_urls>` | Required for the script injection above to work on any site |
 
-插件不会上传任何数据，所有信息都只保存在本地浏览器中。
+No data ever leaves your browser — everything is stored locally.
 
-## 开发 / 测试
+## Development
 
-没有构建工具、包管理器或 linter — 就是直接被 Chrome 加载的原生 JS。
+There's no build tool, package manager, or linter — it's plain, unbundled JS loaded directly by Chrome.
 
-`scripts/history-utils.js` 是唯一一块纯逻辑代码（不依赖 `chrome.*` API），有对应的 Node 测试：
+`scripts/history-utils.js` is the one piece of pure logic (no `chrome.*` calls) and has a real test suite:
 
 ```bash
 node --test tests/*.test.js
 ```
 
-其余涉及 `chrome.tabs`/`chrome.storage`/`chrome.alarms` 的逻辑（`background.js`、`popup/popup.js`）需要在 Chrome 里手动验证——按上面「安装」步骤加载后，通过扩展卡片上的「service worker」链接查看后台日志，或右键工具栏图标「检查弹出内容」调试弹窗。
+Everything else touches `chrome.tabs`/`chrome.storage`/`chrome.alarms` (`background.js`, `popup/popup.js`)
+and needs manual verification in Chrome — load the extension per [Installation](#installation), then use
+the "service worker" link on its card in `chrome://extensions` for background logs, or right-click the
+toolbar icon → "Inspect popup" for the popup.
 
-更详细的架构说明见 [`CLAUDE.md`](./CLAUDE.md)。
+See [`CLAUDE.md`](./CLAUDE.md) for a deeper architecture walkthrough.
 
-## 项目结构
+## Project Structure
 
 ```
-manifest.json           扩展清单
-background.js           后台 Service Worker：空闲检测与自动关闭逻辑
-popup/                  工具栏弹窗界面
+manifest.json           Extension manifest
+background.js           Service worker: idle detection and auto-close logic
+popup/                  Toolbar popup UI
   popup.html / .js / .css
 scripts/
-  detect-input.js        注入页面检测未提交表单输入
-  history-utils.js        纯逻辑辅助函数（关闭记录的构建/格式化），background.js 和 popup.js 共用
+  detect-input.js         Injected into pages to detect unsaved form input
+  history-utils.js        Pure helpers for close-history entries, shared by background.js and popup.js
 tests/
-  history-utils.test.js   history-utils.js 的 Node 测试
-icons/                   扩展图标
+  history-utils.test.js   Node test suite for history-utils.js
+icons/                   Extension icons
 ```
 
-## 已知限制
+## Known Limitations
 
-- 弹窗里「即将清理」的数量会应用音频保护规则，但**不**应用输入保护规则——因为检测表单输入需要往每个候选 tab 注入脚本，如果在弹窗统计时也这么做，会把已经被 Chrome 自动"丢弃"（discarded）的后台 tab 强制唤醒，与插件本身省资源的目的相悖。所以这个数字有时会比实际真正被关闭的数量略高。
-- 对于插件安装/浏览器启动前就已存在的 tab，其"存活时间"的起点是安装/启动那一刻（真实创建时间已不可知），而不是 tab 真正被打开的时间。
+- The popup's "about to be cleaned" count applies the audio protection rule but **not** input protection —
+  checking form input requires injecting a script into every candidate tab, and doing that every time the
+  popup opens would force Chrome to wake up (undiscard) idle background tabs, defeating the point of the
+  extension. So this number can run a little higher than what actually gets closed.
+- For tabs that already existed when the extension was installed or the browser started, "time open" is
+  measured from that install/startup moment (the tab's true creation time isn't knowable), not from when
+  the tab was actually opened.
+
+## Contributing
+
+Issues and PRs are welcome. This is a small, dependency-free project by design — please keep changes
+free of new build tooling or runtime dependencies. [`CLAUDE.md`](./CLAUDE.md) has the architecture notes
+worth reading before diving in.
+
+## License
+
+MIT © Tab Cleaner Authors — see [LICENSE](./LICENSE).
