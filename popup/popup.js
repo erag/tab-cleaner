@@ -75,7 +75,12 @@ async function updateUI() {
   const tabs = await chrome.tabs.query({});
   tabCount.textContent = tabs.length;
 
-  // Count tabs that will be cleaned
+  // Count tabs that will be cleaned. Mirrors background.js's active/idle/audio
+  // checks so the number matches what the next alarm tick will actually close.
+  // Input protection is intentionally NOT applied here: checking it requires
+  // injecting a script into each candidate tab, which would wake up (undiscard)
+  // idle background tabs just from opening the popup — so this count can still
+  // be a little higher than the real close count when protectInput saves a tab.
   const lastActivated = await chrome.storage.session.get('lastActivated');
   const map = lastActivated.lastActivated || {};
   const now = Date.now();
@@ -86,9 +91,9 @@ async function updateUI() {
   for (const tab of tabs) {
     if (activeTabIds.has(tab.id)) continue;
     const lastTime = map[tab.id];
-    if (lastTime && (now - lastTime) >= settings.idleThreshold) {
-      count++;
-    }
+    if (!lastTime || (now - lastTime) < settings.idleThreshold) continue;
+    if (settings.protectAudio && tab.audible) continue;
+    count++;
   }
   cleanupCount.textContent = count;
 
