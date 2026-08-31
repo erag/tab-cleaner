@@ -177,21 +177,23 @@ async function renderHistory() {
 
     const meta = document.createElement('div');
     meta.className = 'history-meta';
-    meta.textContent = timeAgo(entry.closedAt) + ' · ' + new URL(entry.url).hostname;
+    meta.textContent = '存活 ' + formatLifetime(entry.openedAt, entry.closedAt) +
+      ' · ' + timeAgo(entry.closedAt) + ' · ' + safeHostname(entry.url);
     info.appendChild(meta);
 
     item.appendChild(info);
 
-    // Reopen hint
-    const reopen = document.createElement('span');
-    reopen.className = 'history-reopen';
-    reopen.textContent = '打开';
-    item.appendChild(reopen);
+    // Reopen hint + click-to-reopen — only when the entry actually has a URL
+    if (entry.url) {
+      const reopen = document.createElement('span');
+      reopen.className = 'history-reopen';
+      reopen.textContent = '打开';
+      item.appendChild(reopen);
 
-    // Click to reopen
-    item.addEventListener('click', () => {
-      chrome.tabs.create({ url: entry.url });
-    });
+      item.addEventListener('click', () => {
+        chrome.tabs.create({ url: entry.url });
+      });
+    }
 
     historyList.appendChild(item);
   }
