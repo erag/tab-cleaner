@@ -65,21 +65,7 @@ exists vs. what's missing, standing in for a design doc.
   and otherwise left as global function declarations (so a classic `<script>`/`importScripts()` load
   exposes them as bare identifiers).
 
-- [ ] **Step 1: Initialize the git repository**
-
-This repo has no `.git` yet. Every later step in this plan ends with a commit, so set that up first.
-
-```bash
-cd /Users/bytedance/PycharmProjects/tab-cleaner
-git init
-cat > .gitignore <<'EOF'
-.idea/
-EOF
-git add .gitignore CLAUDE.md manifest.json background.js popup icons scripts
-git commit -m "chore: initial commit"
-```
-
-- [ ] **Step 2: Write the failing test suite**
+- [ ] **Step 1: Write the failing test suite**
 
 Create `tests/history-utils.test.js`:
 
@@ -168,13 +154,13 @@ test('safeHostname handles restricted extension-page schemes', () => {
 });
 ```
 
-- [ ] **Step 3: Run the suite to verify it fails**
+- [ ] **Step 2: Run the suite to verify it fails**
 
 Run: `node --test tests/history-utils.test.js`
 Expected: fails with something like `Cannot find module '../scripts/history-utils.js'` (the file doesn't
 exist yet).
 
-- [ ] **Step 4: Implement `scripts/history-utils.js`**
+- [ ] **Step 3: Implement `scripts/history-utils.js`**
 
 ```js
 // scripts/history-utils.js — pure helpers for building & formatting tab
@@ -231,12 +217,12 @@ if (typeof module !== 'undefined' && module.exports) {
 }
 ```
 
-- [ ] **Step 5: Run the suite to verify it passes**
+- [ ] **Step 4: Run the suite to verify it passes**
 
 Run: `node --test tests/history-utils.test.js`
 Expected: all 15 tests pass (`# pass 15`, `# fail 0`).
 
-- [ ] **Step 6: Document the test command in `CLAUDE.md`**
+- [ ] **Step 5: Document the test command in `CLAUDE.md`**
 
 In `CLAUDE.md`, under the existing `## Development / testing` heading, add this line right after the
 "There is no build tool..." paragraph (don't remove the existing paragraph — this is a new addition next to
@@ -248,7 +234,7 @@ Node test suite: run `node --test tests/` (requires Node 18+; no install needed,
 `node:assert` from the standard library).
 ```
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
 git add scripts/history-utils.js tests/history-utils.test.js CLAUDE.md
