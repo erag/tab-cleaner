@@ -24,6 +24,10 @@ A Chrome extension that automatically closes tabs you've forgotten about — idl
 
 - **Idle threshold** — configure how long a tab must sit unfocused before it's considered idle (default 30
   minutes), in minutes or hours.
+- **Tab-count threshold** — cleanup only kicks in once you have more than this many tabs open (default 10,
+  minimum 1). Below that, nothing is closed no matter how idle a tab is. Once over it, idle tabs are closed
+  oldest-first (like an LRU cache evicting least-recently-used entries), stopping as soon as you're back at
+  the threshold — so it never closes more than necessary.
 - **Protection rules**
   - Tabs playing audio (video/music) are never closed.
   - Tabs with unsaved form input (a modified but not-yet-submitted field) are never closed — checked by

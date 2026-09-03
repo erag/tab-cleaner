@@ -7,6 +7,7 @@ const DEFAULT_SETTINGS = {
   idleThreshold: 30 * 60 * 1000, // 30 minutes in ms
   protectAudio: true,
   protectInput: true,
+  tabCountThreshold: 10, // only clean up once open-tab count exceeds this
 };
 
 const ALARM_NAME = 'tab-cleaner-check';
@@ -145,7 +146,9 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
     const map = await getLastActivated();
     const createdMap = await getTabCreated();
     const now = Date.now();
-    const tabsToClose = [];
+    // Candidates carry their lastActivated time so they can be evicted in
+    // least-recently-used order, like an LRU cache evicting oldest entries.
+    const candidates = [];
 
     // Get all currently active tabs (one per window) to never close them
     const activeTabs = await chrome.tabs.query({ active: true });
@@ -184,32 +187,39 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
         continue;
       }
 
-      // Restricted URL schemes — skip form-input check, close directly
-      // (these pages don't have meaningful user form input)
-      if (settings.protectInput && isRestrictedUrl(tab.url)) {
-        // Restricted pages like chrome://newtab, about:blank have no user form data
-        // Close them directly without form-input protection
-        console.log('[TabCleaner] Tab', tabId, 'has restricted URL:', tab.url, '— closing directly (no form-input check)');
-        tabsToClose.push(tabId);
-        continue;
-      }
-
-      tabsToClose.push(tabId);
+      candidates.push({ tabId, lastTime });
     }
 
-    // Save cleaned maps
+    // Save cleaned maps (stale-entry pruning above runs every tick,
+    // independent of the tab-count gate below)
     await setLastActivated(map);
     await setTabCreated(createdMap);
 
-    if (tabsToClose.length === 0) {
-      console.log('[TabCleaner] Alarm fired — no tabs to close (idle threshold:', settings.idleThreshold / 60000, 'min)');
+    // Tab-count threshold gate: only clean up once there are more tabs open
+    // than the configured threshold — like an LRU cache that only evicts
+    // once it's over capacity, rather than on a fixed schedule.
+    if (allTabs.length <= settings.tabCountThreshold) {
+      console.log('[TabCleaner] Tab count (', allTabs.length, ') at or under threshold (',
+        settings.tabCountThreshold, '), skipping cleanup');
       return;
     }
 
-    console.log('[TabCleaner] Alarm fired —', tabsToClose.length, 'idle tab(s) to check for closing');
+    if (candidates.length === 0) {
+      console.log('[TabCleaner] Alarm fired — no idle tabs to close (idle threshold:', settings.idleThreshold / 60000, 'min)');
+      return;
+    }
 
-    // Close idle tabs (with form-input protection if enabled)
-    for (const tabId of tabsToClose) {
+    // Evict least-recently-used first
+    candidates.sort((a, b) => a.lastTime - b.lastTime);
+
+    console.log('[TabCleaner] Alarm fired —', candidates.length, 'idle tab(s) to check for closing',
+      '(tab count', allTabs.length, '> threshold', settings.tabCountThreshold, ')');
+
+    // Close idle tabs oldest-first, with form-input protection if enabled,
+    // stopping as soon as we're back at/under the tab-count threshold so we
+    // don't close more than necessary.
+    let currentTabCount = allTabs.length;
+    for (const { tabId } of candidates) {
       const tab = tabMap[tabId];
       if (!tab) continue;
 
@@ -246,6 +256,13 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
         // Remove from maps regardless
         delete map[tabId];
         delete createdMap[tabId];
+
+        currentTabCount--;
+        if (currentTabCount <= settings.tabCountThreshold) {
+          console.log('[TabCleaner] Back at/under tab-count threshold (', settings.tabCountThreshold,
+            '), stopping this pass to avoid over-cleaning');
+          break;
+        }
       }
     }
 

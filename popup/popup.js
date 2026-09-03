@@ -5,6 +5,7 @@ const DEFAULT_SETTINGS = {
   idleThreshold: 30 * 60 * 1000, // 30 minutes = 1800000 ms
   protectAudio: true,
   protectInput: true,
+  tabCountThreshold: 10, // only clean up once open-tab count exceeds this
 };
 
 // DOM elements
@@ -13,6 +14,7 @@ const statusText = document.getElementById('status-text');
 const thresholdValue = document.getElementById('threshold-value');
 const thresholdUnit = document.getElementById('threshold-unit');
 const thresholdWarning = document.getElementById('threshold-warning');
+const tabCountThresholdInput = document.getElementById('tab-count-threshold');
 const tabCount = document.getElementById('tab-count');
 const cleanupCount = document.getElementById('cleanup-count');
 const protectAudioCheckbox = document.getElementById('protect-audio');
@@ -48,6 +50,18 @@ function scheduleThresholdSave() {
   }, 300);
 }
 
+let tabCountThresholdSaveTimer = null;
+
+function scheduleTabCountThresholdSave() {
+  if (tabCountThresholdSaveTimer) clearTimeout(tabCountThresholdSaveTimer);
+  tabCountThresholdSaveTimer = setTimeout(async () => {
+    const value = Math.max(1, Math.round(Number(tabCountThresholdInput.value)) || 1);
+    tabCountThresholdInput.value = value;
+    await saveSetting('tabCountThreshold', value);
+    updateUI(); // Refresh cleanup count with new threshold
+  }, 300);
+}
+
 // --- UI update ---
 
 async function updateUI() {
@@ -67,6 +81,9 @@ async function updateUI() {
   const totalMs = settings.idleThreshold;
   thresholdWarning.classList.toggle('hidden', totalMs >= 5 * 60 * 1000); // hide if >= 5 min
 
+  // Tab-count threshold
+  tabCountThresholdInput.value = settings.tabCountThreshold;
+
   // Protection toggles
   protectAudioCheckbox.checked = settings.protectAudio;
   protectInputCheckbox.checked = settings.protectInput;
@@ -75,25 +92,33 @@ async function updateUI() {
   const tabs = await chrome.tabs.query({});
   tabCount.textContent = tabs.length;
 
-  // Count tabs that will be cleaned. Mirrors background.js's active/idle/audio
-  // checks so the number matches what the next alarm tick will actually close.
-  // Input protection is intentionally NOT applied here: checking it requires
-  // injecting a script into each candidate tab, which would wake up (undiscard)
-  // idle background tabs just from opening the popup — so this count can still
-  // be a little higher than the real close count when protectInput saves a tab.
-  const lastActivated = await chrome.storage.session.get('lastActivated');
-  const map = lastActivated.lastActivated || {};
-  const now = Date.now();
-  const activeTabs = await chrome.tabs.query({ active: true });
-  const activeTabIds = new Set(activeTabs.map(t => t.id));
-
+  // Count tabs that will be cleaned. Mirrors background.js's gate/active/idle/
+  // audio/LRU-stop-early logic so the number matches what the next alarm tick
+  // will actually close. Input protection is intentionally NOT applied here:
+  // checking it requires injecting a script into each candidate tab, which
+  // would wake up (undiscard) idle background tabs just from opening the
+  // popup — so this count can still be a little higher than the real close
+  // count when protectInput saves a tab.
   let count = 0;
-  for (const tab of tabs) {
-    if (activeTabIds.has(tab.id)) continue;
-    const lastTime = map[tab.id];
-    if (!lastTime || (now - lastTime) < settings.idleThreshold) continue;
-    if (settings.protectAudio && tab.audible) continue;
-    count++;
+  if (tabs.length > settings.tabCountThreshold) {
+    const lastActivated = await chrome.storage.session.get('lastActivated');
+    const map = lastActivated.lastActivated || {};
+    const now = Date.now();
+    const activeTabs = await chrome.tabs.query({ active: true });
+    const activeTabIds = new Set(activeTabs.map(t => t.id));
+
+    let eligible = 0;
+    for (const tab of tabs) {
+      if (activeTabIds.has(tab.id)) continue;
+      const lastTime = map[tab.id];
+      if (!lastTime || (now - lastTime) < settings.idleThreshold) continue;
+      if (settings.protectAudio && tab.audible) continue;
+      eligible++;
+    }
+    // Cleanup stops as soon as tab count is back at/under the threshold, so
+    // at most (tabs.length - tabCountThreshold) tabs will actually close.
+    const maxCloseable = tabs.length - settings.tabCountThreshold;
+    count = Math.min(eligible, maxCloseable);
   }
   cleanupCount.textContent = count;
 
@@ -112,6 +137,8 @@ enabledToggle.addEventListener('change', async () => {
 // Use 'input' event (fires on every keystroke) instead of 'change' (requires blur)
 // This ensures threshold changes are saved even if the popup closes
 thresholdValue.addEventListener('input', scheduleThresholdSave);
+
+tabCountThresholdInput.addEventListener('input', scheduleTabCountThresholdSave);
 
 thresholdUnit.addEventListener('change', async () => {
   const value = Math.max(1, Number(thresholdValue.value) || 1);

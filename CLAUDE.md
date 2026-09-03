@@ -42,7 +42,7 @@ popup and background):
 ### State model
 
 - `chrome.storage.local`: persisted settings (`enabled`, `idleThreshold` in ms, `protectAudio`,
-  `protectInput`) plus `closeHistory` (ring buffer of up to `MAX_HISTORY` = 50 closed-tab records, newest
+  `protectInput`, `tabCountThreshold`) plus `closeHistory` (ring buffer of up to `MAX_HISTORY` = 50 closed-tab records, newest
   first, used to render the "recently closed" list and let the user reopen a tab from it). Each entry also
   carries an `openedAt` timestamp alongside the pre-existing `closedAt`, so the popup can show a lifetime
   range (see `buildHistoryEntry()`/`formatLifetime()` in `scripts/history-utils.js`). For tabs that already
@@ -64,8 +64,19 @@ popup and background):
 
 ### Close decision flow (`chrome.alarms.onAlarm` in `background.js`)
 
-For each tracked tab, in order:
-1. Skip if `idleTime < idleThreshold` or the extension is disabled.
+The whole pass is gated and bounded by `tabCountThreshold`, modeled on an LRU cache that only evicts once
+it's over capacity: if the current tab count is at or under `tabCountThreshold`, the alarm handler returns
+immediately without closing anything, however idle individual tabs are. Stale-entry pruning of
+`lastActivated`/`tabCreated` (tab IDs that no longer exist) still runs every tick regardless of this gate.
+
+Once over the threshold, eligible tabs (idle, non-active, not audio-protected — see below) are collected as
+candidates and sorted oldest-`lastActivated`-first (least-recently-used order), then closed one at a time.
+After each close, the running tab count is rechecked against `tabCountThreshold` and the loop breaks as soon
+as it's back at/under the threshold — so a tick never closes more tabs than necessary, even if more idle
+candidates remain.
+
+Per-candidate eligibility, in order:
+1. Skip if `idleTime < idleThreshold`.
 2. Never close a tab that is the active tab in its window (checked via `chrome.tabs.query({ active: true })`).
 3. Skip if `protectAudio` is on and the tab is `audible`.
 4. If the tab's URL matches `RESTRICTED_SCHEMES` (`chrome:`, `about:`, `chrome-extension:`, `devtools:`,
@@ -77,7 +88,10 @@ For each tracked tab, in order:
 
 When changing this flow, keep the ordering intent: cheap/synchronous protections (active tab, audio,
 restricted scheme) are checked before the async form-input injection, since the injection is the expensive
-step and only applies to ordinary http(s)-like pages.
+step and only applies to ordinary http(s)-like pages. `popup/popup.js`'s cleanup-count preview mirrors the
+gate and the LRU stop-early cap (`min(eligible, tabs.length - tabCountThreshold)`) so the displayed number
+matches what the next tick will actually do — keep the two in sync the same way `DEFAULT_SETTINGS` below
+must stay in sync.
 
 ### Settings
 
