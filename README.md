@@ -28,6 +28,8 @@ A Chrome extension that automatically closes tabs you've forgotten about — idl
   minimum 1). Below that, nothing is closed no matter how idle a tab is. Once over it, idle tabs are closed
   oldest-first (like an LRU cache evicting least-recently-used entries), stopping as soon as you're back at
   the threshold — so it never closes more than necessary.
+- **Domain whitelist** — add up to 10 domains (subdomains included, e.g. `google.com` also covers
+  `mail.google.com`) whose tabs are never auto-closed, regardless of idle time or the tab-count threshold.
 - **Protection rules**
   - Tabs playing audio (video/music) are never closed.
   - Tabs with unsaved form input (a modified but not-yet-submitted field) are never closed — checked by
@@ -102,8 +104,10 @@ popup/                  Toolbar popup UI
 scripts/
   detect-input.js         Injected into pages to detect unsaved form input
   history-utils.js        Pure helpers for close-history entries, shared by background.js and popup.js
+  domain-utils.js         Pure helpers for the domain whitelist, shared by background.js and popup.js
 tests/
   history-utils.test.js   Node test suite for history-utils.js
+  domain-utils.test.js    Node test suite for domain-utils.js
 icons/                   Extension icons
 ```
 

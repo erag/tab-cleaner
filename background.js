@@ -1,6 +1,7 @@
 // background.js — Tab Cleaner Service Worker
 
 importScripts('scripts/history-utils.js');
+importScripts('scripts/domain-utils.js');
 
 const DEFAULT_SETTINGS = {
   enabled: true,
@@ -8,6 +9,7 @@ const DEFAULT_SETTINGS = {
   protectAudio: true,
   protectInput: true,
   tabCountThreshold: 10, // only clean up once open-tab count exceeds this
+  domainWhitelist: [], // hostnames (and their subdomains) exempt from cleanup, max MAX_WHITELIST_DOMAINS
 };
 
 const ALARM_NAME = 'tab-cleaner-check';
@@ -184,6 +186,12 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
       // Audio protection
       if (settings.protectAudio && tab.audible) {
         console.log('[TabCleaner] Tab', tabId, 'is playing audio, skipping');
+        continue;
+      }
+
+      // Domain whitelist
+      if (isWhitelistedDomain(safeHostname(tab.url), settings.domainWhitelist)) {
+        console.log('[TabCleaner] Tab', tabId, 'domain is whitelisted, skipping');
         continue;
       }
 

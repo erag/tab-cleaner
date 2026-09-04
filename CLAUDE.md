@@ -11,12 +11,12 @@ source files are loaded by Chrome directly.
 ## Development / testing
 
 There is no build tool, package manager, or linter in this repo — it's plain unbundled JS loaded straight
-into Chrome. The one exception is `scripts/history-utils.js`, whose logic is pure (no `chrome.*` calls) and
-has a real Node test suite: run `node --test tests/*.test.js` from the repo root (no install needed, it's
-`node:test`/`node:assert` from the standard library). Plain `node --test` with no arguments also works (it
-auto-discovers `tests/`), but on current Node the seemingly-equivalent `node --test tests/` does not — Node
-treats a bare directory argument as a single file/glob rather than expanding it, and errors with "Cannot
-find module".
+into Chrome. The exception is `scripts/*-utils.js` (`history-utils.js`, `domain-utils.js`), whose logic is
+pure (no `chrome.*` calls) and has a real Node test suite: run `node --test tests/*.test.js` from the repo
+root (no install needed, it's `node:test`/`node:assert` from the standard library). Plain `node --test` with
+no arguments also works (it auto-discovers `tests/`), but on current Node the seemingly-equivalent
+`node --test tests/` does not — Node treats a bare directory argument as a single file/glob rather than
+expanding it, and errors with "Cannot find module".
 
 To try changes:
 1. Open `chrome://extensions`, enable "Developer mode".
@@ -38,11 +38,14 @@ popup and background):
 - **`scripts/detect-input.js`** — a standalone script injected via `chrome.scripting.executeScript` into a
   *candidate-for-closing* tab, on demand, right before closing it. Returns `true` if the page has
   form fields with user-modified (unsaved) values, in which case the close is aborted for that tab.
+- **`scripts/domain-utils.js`** — pure helpers (`normalizeDomain()`, `isWhitelistedDomain()`) for the domain
+  whitelist feature, shared by `background.js` and `popup/popup.js` the same way as `history-utils.js`.
 
 ### State model
 
 - `chrome.storage.local`: persisted settings (`enabled`, `idleThreshold` in ms, `protectAudio`,
-  `protectInput`, `tabCountThreshold`) plus `closeHistory` (ring buffer of up to `MAX_HISTORY` = 50 closed-tab records, newest
+  `protectInput`, `tabCountThreshold`, `domainWhitelist` — an array of up to `MAX_WHITELIST_DOMAINS` (10)
+  hostnames from `scripts/domain-utils.js`) plus `closeHistory` (ring buffer of up to `MAX_HISTORY` = 50 closed-tab records, newest
   first, used to render the "recently closed" list and let the user reopen a tab from it). Each entry also
   carries an `openedAt` timestamp alongside the pre-existing `closedAt`, so the popup can show a lifetime
   range (see `buildHistoryEntry()`/`formatLifetime()` in `scripts/history-utils.js`). For tabs that already
@@ -69,8 +72,9 @@ it's over capacity: if the current tab count is at or under `tabCountThreshold`,
 immediately without closing anything, however idle individual tabs are. Stale-entry pruning of
 `lastActivated`/`tabCreated` (tab IDs that no longer exist) still runs every tick regardless of this gate.
 
-Once over the threshold, eligible tabs (idle, non-active, not audio-protected — see below) are collected as
-candidates and sorted oldest-`lastActivated`-first (least-recently-used order), then closed one at a time.
+Once over the threshold, eligible tabs (idle, non-active, not audio-protected, not domain-whitelisted — see
+below) are collected as candidates and sorted oldest-`lastActivated`-first (least-recently-used order), then
+closed one at a time.
 After each close, the running tab count is rechecked against `tabCountThreshold` and the loop breaks as soon
 as it's back at/under the threshold — so a tick never closes more tabs than necessary, even if more idle
 candidates remain.
@@ -79,19 +83,21 @@ Per-candidate eligibility, in order:
 1. Skip if `idleTime < idleThreshold`.
 2. Never close a tab that is the active tab in its window (checked via `chrome.tabs.query({ active: true })`).
 3. Skip if `protectAudio` is on and the tab is `audible`.
-4. If the tab's URL matches `RESTRICTED_SCHEMES` (`chrome:`, `about:`, `chrome-extension:`, `devtools:`,
+4. Skip if the tab's hostname is in (or a subdomain of an entry in) `domainWhitelist`, via
+   `isWhitelistedDomain(safeHostname(tab.url), settings.domainWhitelist)`.
+5. If the tab's URL matches `RESTRICTED_SCHEMES` (`chrome:`, `about:`, `chrome-extension:`, `devtools:`,
    `data:`, `javascript:`, `blob:` — scripts can't be injected into these), it's closed directly without a
    form-input check.
-5. Otherwise, if `protectInput` is on, `scripts/detect-input.js` is injected to check for unsaved form
+6. Otherwise, if `protectInput` is on, `scripts/detect-input.js` is injected to check for unsaved form
    input; if injection itself fails, the tab is protected (not closed) rather than assuming it's safe.
-6. Every tab actually closed is recorded via `recordClose()` into `closeHistory` before `chrome.tabs.remove`.
+7. Every tab actually closed is recorded via `recordClose()` into `closeHistory` before `chrome.tabs.remove`.
 
-When changing this flow, keep the ordering intent: cheap/synchronous protections (active tab, audio,
-restricted scheme) are checked before the async form-input injection, since the injection is the expensive
-step and only applies to ordinary http(s)-like pages. `popup/popup.js`'s cleanup-count preview mirrors the
-gate and the LRU stop-early cap (`min(eligible, tabs.length - tabCountThreshold)`) so the displayed number
-matches what the next tick will actually do — keep the two in sync the same way `DEFAULT_SETTINGS` below
-must stay in sync.
+When changing this flow, keep the ordering intent: cheap/synchronous protections (active tab, audio, domain
+whitelist, restricted scheme) are checked before the async form-input injection, since the injection is the
+expensive step and only applies to ordinary http(s)-like pages. `popup/popup.js`'s cleanup-count preview
+mirrors the gate and the LRU stop-early cap (`min(eligible, tabs.length - tabCountThreshold)`) so the
+displayed number matches what the next tick will actually do — keep the two in sync the same way
+`DEFAULT_SETTINGS` below must stay in sync.
 
 ### Settings
 

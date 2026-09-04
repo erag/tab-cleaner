@@ -74,6 +74,23 @@
 
     <div class="section">
       <div class="label-row">
+        <label class="label">域名白名单</label>
+        <span id="whitelist-count" class="whitelist-count">0/10</span>
+      </div>
+      <div class="whitelist-add-row">
+        <input type="text" id="whitelist-input" class="whitelist-input" placeholder="example.com">
+        <button id="whitelist-add" class="clear-btn">添加</button>
+      </div>
+      <div id="whitelist-warning" class="warning hidden">最多添加 10 条</div>
+      <div id="whitelist-list" class="whitelist-list">
+        <div class="whitelist-empty">暂无白名单域名</div>
+      </div>
+    </div>
+
+    <div class="divider"></div>
+
+    <div class="section">
+      <div class="label-row">
         <label class="label">关闭历史</label>
         <button id="clear-history" class="clear-btn">清空</button>
       </div>
@@ -84,6 +101,7 @@
   </div>
 
   <script src="../scripts/history-utils.js"></script>
+  <script src="../scripts/domain-utils.js"></script>
   <script src="popup.js"></script>
 </body>
 </html>

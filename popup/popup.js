@@ -6,6 +6,7 @@ const DEFAULT_SETTINGS = {
   protectAudio: true,
   protectInput: true,
   tabCountThreshold: 10, // only clean up once open-tab count exceeds this
+  domainWhitelist: [], // hostnames (and their subdomains) exempt from cleanup, max MAX_WHITELIST_DOMAINS
 };
 
 // DOM elements
@@ -19,6 +20,11 @@ const tabCount = document.getElementById('tab-count');
 const cleanupCount = document.getElementById('cleanup-count');
 const protectAudioCheckbox = document.getElementById('protect-audio');
 const protectInputCheckbox = document.getElementById('protect-input');
+const whitelistInput = document.getElementById('whitelist-input');
+const whitelistAddBtn = document.getElementById('whitelist-add');
+const whitelistWarning = document.getElementById('whitelist-warning');
+const whitelistCount = document.getElementById('whitelist-count');
+const whitelistList = document.getElementById('whitelist-list');
 const clearHistoryBtn = document.getElementById('clear-history');
 const historyList = document.getElementById('history-list');
 
@@ -113,6 +119,7 @@ async function updateUI() {
       const lastTime = map[tab.id];
       if (!lastTime || (now - lastTime) < settings.idleThreshold) continue;
       if (settings.protectAudio && tab.audible) continue;
+      if (isWhitelistedDomain(safeHostname(tab.url), settings.domainWhitelist)) continue;
       eligible++;
     }
     // Cleanup stops as soon as tab count is back at/under the threshold, so
@@ -121,6 +128,9 @@ async function updateUI() {
     count = Math.min(eligible, maxCloseable);
   }
   cleanupCount.textContent = count;
+
+  // Domain whitelist
+  renderWhitelist(settings.domainWhitelist || []);
 
   // Close history
   await renderHistory();
@@ -156,6 +166,68 @@ protectAudioCheckbox.addEventListener('change', async () => {
 
 protectInputCheckbox.addEventListener('change', async () => {
   await saveSetting('protectInput', protectInputCheckbox.checked);
+});
+
+// --- Domain whitelist ---
+
+function renderWhitelist(whitelist) {
+  whitelistCount.textContent = whitelist.length + '/' + MAX_WHITELIST_DOMAINS;
+
+  const atLimit = whitelist.length >= MAX_WHITELIST_DOMAINS;
+  whitelistWarning.classList.toggle('hidden', !atLimit);
+  whitelistInput.disabled = atLimit;
+  whitelistAddBtn.disabled = atLimit;
+
+  if (whitelist.length === 0) {
+    whitelistList.innerHTML = '<div class="whitelist-empty">暂无白名单域名</div>';
+    return;
+  }
+
+  whitelistList.innerHTML = '';
+  for (const domain of whitelist) {
+    const item = document.createElement('div');
+    item.className = 'whitelist-item';
+
+    const domainSpan = document.createElement('span');
+    domainSpan.className = 'whitelist-domain';
+    domainSpan.textContent = domain;
+    item.appendChild(domainSpan);
+
+    const removeBtn = document.createElement('button');
+    removeBtn.className = 'whitelist-remove';
+    removeBtn.textContent = '×';
+    removeBtn.setAttribute('aria-label', '移除 ' + domain);
+    removeBtn.addEventListener('click', async () => {
+      const settings = await getSettings();
+      const next = (settings.domainWhitelist || []).filter((d) => d !== domain);
+      await saveSetting('domainWhitelist', next);
+      await updateUI();
+    });
+    item.appendChild(removeBtn);
+
+    whitelistList.appendChild(item);
+  }
+}
+
+async function addWhitelistDomain() {
+  const domain = normalizeDomain(whitelistInput.value);
+  whitelistInput.value = '';
+  if (!domain) return;
+
+  const settings = await getSettings();
+  const current = settings.domainWhitelist || [];
+  if (current.includes(domain) || current.length >= MAX_WHITELIST_DOMAINS) {
+    await updateUI();
+    return;
+  }
+  await saveSetting('domainWhitelist', current.concat(domain));
+  await updateUI();
+}
+
+whitelistAddBtn.addEventListener('click', addWhitelistDomain);
+
+whitelistInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') addWhitelistDomain();
 });
 
 // --- Close history ---

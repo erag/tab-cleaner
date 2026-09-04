@@ -294,3 +294,82 @@ input:checked + .slider::before {
 .history-item:hover .history-reopen {
   opacity: 1;
 }
+
+/* Domain whitelist */
+.whitelist-count {
+  font-size: 11px;
+  color: #9aa0a6;
+}
+
+.whitelist-add-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.whitelist-input {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 8px;
+  border: 1px solid #dadce0;
+  border-radius: 4px;
+  font-size: 13px;
+  outline: none;
+}
+
+.whitelist-input:focus {
+  border-color: #1a73e8;
+}
+
+.whitelist-input:disabled {
+  background: #f1f3f4;
+  color: #9aa0a6;
+}
+
+.whitelist-list {
+  max-height: 140px;
+  overflow-y: auto;
+}
+
+.whitelist-empty {
+  font-size: 12px;
+  color: #9aa0a6;
+  text-align: center;
+  padding: 8px 0;
+}
+
+.whitelist-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 4px;
+  border-bottom: 1px solid #f1f3f4;
+}
+
+.whitelist-item:last-child {
+  border-bottom: none;
+}
+
+.whitelist-domain {
+  font-size: 12px;
+  color: #202124;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.whitelist-remove {
+  font-size: 14px;
+  line-height: 1;
+  color: #9aa0a6;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 2px 6px;
+  flex-shrink: 0;
+}
+
+.whitelist-remove:hover {
+  color: #d93025;
+}

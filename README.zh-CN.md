@@ -26,6 +26,8 @@
 - **清理阈值** — 只有当前打开的 tab 数超过这个数量（默认 10，最小 1）才会开始清理；数量不够时无论多空闲都不会
   被关闭。一旦超过阈值，会按最久未使用（LRU 缓存淘汰最旧条目那种顺序）优先关闭最旧的空闲 tab，一旦数量回落到
   阈值以内就立刻停止，不会关闭超过实际需要的数量。
+- **域名白名单** — 最多添加 10 个域名（含子域名，比如 `google.com` 也会覆盖 `mail.google.com`），这些域名下
+  的 tab 永远不会被自动关闭，不受空闲时间或 tab 数量阈值影响。
 - **保护规则**
   - 有音频的 tab（正在播放视频/音乐）不会被关闭。
   - 有未提交表单输入的 tab 不会被关闭 —— 关闭前会注入检测脚本，确认页面里是否有已修改但未提交的输入框/文本域。
@@ -94,8 +96,10 @@ popup/                  工具栏弹窗界面
 scripts/
   detect-input.js         注入页面检测未提交表单输入
   history-utils.js         纯逻辑辅助函数（关闭记录的构建/格式化），background.js 和 popup.js 共用
+  domain-utils.js          域名白名单的纯逻辑辅助函数，background.js 和 popup.js 共用
 tests/
   history-utils.test.js    history-utils.js 的 Node 测试
+  domain-utils.test.js     domain-utils.js 的 Node 测试
 icons/                   扩展图标
 ```
 
